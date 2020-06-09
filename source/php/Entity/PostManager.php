@@ -2,14 +2,18 @@
 
 namespace EventManagerIntegration\Entity;
 
+use EventManagerIntegration\Helper\IntermediateImagesCleaner as IntermediateImagesCleaner;
+
 abstract class PostManager
 {
+    use \EventManagerIntegration\LoggerSupport;
     /**
      * Post object sticky values
      */
     public $post_type = null;
     public $post_status = 'publish';
-    public $ID; 
+    public $ID;
+    private $intermediateImagesCleaner;
 
     /**
      * Keys that counts as post object properties
@@ -47,6 +51,7 @@ abstract class PostManager
      */
     public function __construct($postData = array(), $metaData = array())
     {
+        $this->intermediateImagesCleaner = new IntermediateImagesCleaner();
         if (is_null($this->post_type)) {
             throw new \Exception('You need to specify a post type by setting the class property $postType');
             exit;
@@ -206,10 +211,12 @@ abstract class PostManager
         if (isset($duplicate->ID)) {
             //Check if event needs to be updated
             if (get_post_meta($duplicate->ID, 'last_update', true) != $meta['last_update']) {
+                $this->log("Event <{$meta['_event_manager_id']}> already exists with WP-ID <$duplicate->ID> but has a new update");
                 $post['ID'] = $duplicate->ID;
                 $this->ID = wp_update_post($post);
                 $isDuplicate = true;
             } else {
+                $this->log("Event <{$meta['_event_manager_id']}> already exists with WP-ID <$duplicate->ID> and has no updates");
                 return false;
             }
         } else {
@@ -283,31 +290,82 @@ abstract class PostManager
             );
 
             // Move to real extension
-            rename($uploadDir . '/' . $filenameTemp, $uploadDir . '/' . $filename . '.' . $filetype);
+            $finalFileName = $uploadDir . '/' . $filename . '.' . $filetype;
+            rename($uploadDir . '/' . $filenameTemp, $finalFileName);
+
+            $attachmentArgs = array(
+                'guid' => $uploadDir . '/' . $filename . '.' . $filetype,
+                'post_mime_type' => $mimeFileType,
+                'post_title' => $filename,
+                'post_content' => '',
+                'post_status' => 'inherit',
+                'post_parent' => $this->ID
+            );
+
+            // The gallery function (i.e. $featured = false) does not seem to work anyway so lets just implement cleaning for the featured image.
+            $currentThumbnailId = "";
+            if ($featured) {
+                $currentThumbnailId = get_post_thumbnail_id($this->ID);
+            }
+            $hasCurrentThumbnail = !empty($currentThumbnailId);
+            $oldThumbnailFilePath = null;
+
+            if ($hasCurrentThumbnail) {
+                $attachmentArgs['ID'] = $currentThumbnailId;
+                $oldThumbnailFilePath = get_attached_file($currentThumbnailId);
+            }
 
             // Insert the file to media library
             $attachmentId = wp_insert_attachment(
-                array(
-                    'guid' => $uploadDir . '/' . $filename . '.' . $filetype,
-                    'post_mime_type' => $mimeFileType,
-                    'post_title' => $filename,
-                    'post_content' => '',
-                    'post_status' => 'inherit',
-                    'post_parent' => $this->ID
-                ), 
-                $uploadDir . '/' . $filename . "." . $filetype, 
+                $attachmentArgs,
+                $finalFileName,
                 $this->ID
             );
 
-            if($attachmentId) {
+            if ($hasCurrentThumbnail) {
+                $this->intermediateImagesCleaner->cleanMunicipioGeneratedIntermediateImages($oldThumbnailFilePath);
+            }
+
+            if($attachmentId && !$hasCurrentThumbnail) {
                 update_post_meta($attachmentId, 'event-manager-media', 1); //Filter in [/Admin/MediaLibrary.php]
             }
 
-            //Bind the image to the event
-            $this->bindImageToEvent($attachmentId, $featured); 
+            if (!$hasCurrentThumbnail) {
+                //Bind the image to the event
+                $this->bindImageToEvent($attachmentId, $featured);
+            }
         } 
 
         return true;
+    }
+
+    private function cleanMunicipioGeneratedIntermediateImages($filePath)
+    {
+        $this->log("Cleaning intermediate files for path: <{$filePath}>");
+        $baseFileName = wp_basename($filePath);
+        $baseDir = dirname($filePath);
+        $extension = wp_check_filetype($baseFileName)["ext"];
+        $baseFileNamePrefix = str_replace(".{$extension}", "", $baseFileName);
+        if ($extension === false) {
+            $this->error("Tried to clean old intermediate images but got no extension for <{$filePath}>");
+            return;
+        }
+
+        $attachments = list_files($baseDir, 1);
+        if ($attachments === false) {
+            $this->error("Failed to list files when cleaning old intermediate images. File path: <{$filePath}>");
+            return;
+        }
+
+        $count = 0;
+        foreach($attachments as $attachment) {
+            $attachmentFileName = wp_basename($attachment);
+            if (preg_match("/^$baseFileNamePrefix-\d+x\d+\.{$extension}$/", $attachmentFileName)) {
+                wp_delete_file($attachment);
+                $count++;
+            }
+        }
+        $this->log("Cleared $count intermediate files from path: <{$filePath}>");
     }
 
     /**

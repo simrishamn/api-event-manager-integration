@@ -5,7 +5,7 @@ namespace EventManagerIntegration;
 class Event extends Entity\PostManager
 {
     public $post_type = 'event';
-    
+
     /**
      * Stuff to do before save
      * @return void
@@ -29,7 +29,7 @@ class Event extends Entity\PostManager
         $this->saveLocation();
         $this->saveAddLocations();
         $this->saveLanguage();
-
+        
         if (!empty($this->gallery)) {
             foreach ($this->gallery as $key => $image) {
                 $this->setFeaturedImageFromUrl($image['url'], false);

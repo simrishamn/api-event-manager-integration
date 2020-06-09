@@ -6,13 +6,19 @@ use \EventManagerIntegration\Event as Event;
 
 class EventManagerApi extends \EventManagerIntegration\Parser
 {
+    use \EventManagerIntegration\LoggerSupport;
+
+    private $intermediateImagesCleaner;
+
     public function __construct($url)
     {
+        $this->intermediateImagesCleaner = new \EventManagerIntegration\Helper\IntermediateImagesCleaner($featuredImageId);
         parent::__construct($url);
     }
 
     public function start()
     {
+        $this->log("starting import at " . date("c"));
         if (function_exists('kses_remove_filters')) {
             kses_remove_filters();
         }
@@ -24,8 +30,10 @@ class EventManagerApi extends \EventManagerIntegration\Parser
         $eventIds = array();
         $checkApiDiff = true;
         $i = 0;
+        $eventCount = 0;
         do {
             $language = $languages[$i] ?? '';
+            $this->log("importing language: <$language>");
             // Loop through paginated API request
             $page = 1;
             while ($page) {
@@ -38,23 +46,28 @@ class EventManagerApi extends \EventManagerIntegration\Parser
                     $this->url
                 );
 
+                $this->log("requesting events for: <$url>");
                 $events = \EventManagerIntegration\Parser::requestApi($url);
 
                 if (is_wp_error($events)) {
                     // Skip check of events diff on error
                     $checkApiDiff = false;
                     $page = false;
+                    $this->error("Error when fetching events. Code: {$events->get_error_code()}, Message: {$events->get_error_message()}");
                     break;
                 } elseif ($events) {
+                    $this->log("Got events. Count: " . count($events));
                     // Save events to database
                     foreach ($events as $event) {
                         $event['lang'] = !empty($event['lang']) ? $event['lang'] : $language;
                         $this->saveEvent($event);
+                        $eventCount++;
                         if (isset($event['id'])) {
                             $eventIds[] = $event['id'];
                         }
                     }
                 } else {
+                    $this->log("No more events. Pagination: $page");
                     $page = false;
                     break;
                 }
@@ -64,6 +77,8 @@ class EventManagerApi extends \EventManagerIntegration\Parser
             $i++;
 
         } while (count($languages) > $i);
+
+        $this->log("Processed $eventCount events from the API");
 
         // Delete events that has been deleted from the API
         if ($checkApiDiff === true && !empty($eventIds)) {
@@ -75,6 +90,7 @@ class EventManagerApi extends \EventManagerIntegration\Parser
 
         // Sync category translations
         \EventManagerIntegration\Helper\Translations::defineCategoryTranslations();
+        $this->log("finished import at " . date("c"));
     }
 
     /**
@@ -152,6 +168,7 @@ class EventManagerApi extends \EventManagerIntegration\Parser
         $event_id = $this->checkIfEventExists($event['id']);
         if ($event_id) {
             $post_status = get_post_status($event_id);
+            $this->log("Event <{$event['id']}> exists. Status: $post_status");
         } elseif (is_array($occasions) && !empty($occasions)) {
             // Unpublish the event if occasion is longer than limit option
             $unpublish_limit = get_field('event_unpublish_limit', 'option');
@@ -163,6 +180,10 @@ class EventManagerApi extends \EventManagerIntegration\Parser
                     $post_status = 'draft';
                 }
             }
+        }
+
+        if (!$event_id) {
+            $this->log("Event <{$event['id']}> is new.");
         }
 
         // Save event if it passed taxonomy and group filters
@@ -231,7 +252,7 @@ class EventManagerApi extends \EventManagerIntegration\Parser
                     )
                 );
             } catch (\Exception $e) {
-                error_log(print_r($e, true));
+                $this->error("Failed to create event " . print_r($e, true));
                 return;
             }
             $createSuccess = $event->save();
@@ -322,6 +343,7 @@ class EventManagerApi extends \EventManagerIntegration\Parser
      */
     public function removeDeletedEvents($ids)
     {
+        $this->log("Analysing API events for deletion: " . join($ids, ", "));
         global $wpdb;
         $table = $wpdb->prefix . "integrate_occasions";
         // Get all locally stored events
@@ -344,6 +366,7 @@ class EventManagerApi extends \EventManagerIntegration\Parser
         // Collect events that is stored locally but is missing in the API
         $diffEvents = array_diff($localEvents, $apiEvents);
         // Loop through the diff and delete its occasions
+        $this->log("About to delete event occurance with Event IDs: [" . join($diffEvents, ", ") . "]");
         if (!empty($diffEvents)) {
             foreach ($diffEvents as $event) {
                 $wpdb->delete($table, array('event_id' => $event));
@@ -376,6 +399,19 @@ class EventManagerApi extends \EventManagerIntegration\Parser
             $results = $wpdb->get_results($completeQuery);
             // Delete event if occasions is empty
             if (count($results) == 0) {
+                $this->log("Will delete event with ID: {$e->ID}");
+                $featuredImageId = get_post_thumbnail_id($e->ID);
+
+                if (!empty($featuredImageId)) {
+                    $this->log("Event about to be deleted has a featured image with ID $featuredImageId");
+                    $featuredImageFilePath = get_attached_file($featuredImageId);
+                    if ($featuredImageFilePath !== false) {
+                        $this->intermediateImagesCleaner->cleanMunicipioGeneratedIntermediateImages($featuredImageFilePath);
+                    } else {
+                        $this->error("Failed to find file path to featured event image with ID $featuredImageId");
+                    }
+                }
+
                 wp_delete_post($e->ID, true);
             }
         }
