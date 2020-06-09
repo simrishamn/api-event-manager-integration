@@ -27,7 +27,7 @@ build_script:
   - rm -rf dist/ vendor/*/
   - composer config version "$VERSION"
   - truncate -s 0 vendor/autoload.php
-  - npm run build
+  - gulp build
 
 after_build:
   - zip -r "$ARTIFACT" . -x ".git*" -x "node_modules/*" -x "vendor/*/*"
