@@ -4,6 +4,8 @@ namespace EventManagerIntegration;
 
 class App
 {
+    use \EventManagerIntegration\LoggerSupport;
+
     /* Set to 'dev' or 'min' */
     public static $assetSuffix = 'min';
 
@@ -194,8 +196,12 @@ class App
      */
     public function importEventsCron()
     {
-        if (get_field('event_daily_import', 'option') == true && $apiUrl = Helper\ApiUrl::buildApiUrl()) {
-            new Parser\EventManagerApi($apiUrl);
+        try {
+            if (get_field('event_daily_import', 'option') == true && $apiUrl = Helper\ApiUrl::buildApiUrl()) {
+                new Parser\EventManagerApi($apiUrl);
+            }
+        } catch(\Throwable $err) {
+            $this->error("Catch-all for api-event-integration. Error: " . print_r($err, true));
         }
     }
 
