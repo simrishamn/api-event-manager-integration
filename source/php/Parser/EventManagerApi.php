@@ -9,6 +9,8 @@ class EventManagerApi extends \EventManagerIntegration\Parser
     use \EventManagerIntegration\LoggerSupport;
 
     private $intermediateImagesCleaner;
+    private $newEventIdList;
+    private $updatedEventIdList;
 
     public function __construct($url)
     {
@@ -19,6 +21,8 @@ class EventManagerApi extends \EventManagerIntegration\Parser
     public function start()
     {
         $this->log("starting import at " . date("c"));
+        $this->newEventIdList = [];
+        $this->updatedEventIdList = [];
         if (function_exists('kses_remove_filters')) {
             kses_remove_filters();
         }
@@ -31,6 +35,8 @@ class EventManagerApi extends \EventManagerIntegration\Parser
         $checkApiDiff = true;
         $i = 0;
         $eventCount = 0;
+        $batchTimings = [];
+        $requestTimings = [];
         do {
             $language = $languages[$i] ?? '';
             $this->log("importing language: <$language>");
@@ -40,14 +46,17 @@ class EventManagerApi extends \EventManagerIntegration\Parser
                 $url = add_query_arg(
                     array(
                         'page' => $page,
-                        'per_page' => 25,
+                        'per_page' => 50,
                         'lang' => $language,
                     ),
                     $this->url
                 );
 
                 $this->log("requesting events for: <$url>");
+                $requestStart = hrtime(true);
                 $events = \EventManagerIntegration\Parser::requestApi($url);
+                $requestFinish = hrtime(true);
+                $requestTimings[] = ($batchFinish - $batchStart) / 1e+6;
 
                 if (is_wp_error($events)) {
                     // Skip check of events diff on error
@@ -56,6 +65,7 @@ class EventManagerApi extends \EventManagerIntegration\Parser
                     $this->error("Error when fetching events. Code: {$events->get_error_code()}, Message: {$events->get_error_message()}");
                     break;
                 } elseif ($events) {
+                    $batchStart = hrtime(true);
                     $this->log("Got events. Count: " . count($events));
                     // Save events to database
                     foreach ($events as $event) {
@@ -66,19 +76,29 @@ class EventManagerApi extends \EventManagerIntegration\Parser
                             $eventIds[] = $event['id'];
                         }
                     }
+                    $batchFinish = hrtime(true);
+                    $batchTimings[] = ($batchFinish - $batchStart) / 1e+6;
                 } else {
                     $this->log("No more events. Pagination: $page");
                     $page = false;
                     break;
                 }
                 $page++;
+
+                
             }
 
             $i++;
 
         } while (count($languages) > $i);
 
+        $summer = function($acc, $current) { return $acc + $current; };
         $this->log("Processed $eventCount events from the API");
+        $this->log("Average request timing: " . (array_reduce($requestTimings, $summer, 0.0) / count($requestTimings)));
+        $this->log("Average batch timing: " . (array_reduce($batchTimings, $summer, 0.0) / count($batchTimings)));
+        $this->log("Processed event ID list: [" . join(array_unique($eventIds), ", ") . "]");
+        $this->log("Added new events: " . json_encode($this->newEventIdList));
+        $this->log("Updated existing events: " . json_encode($this->newEventIdList));
 
         // Delete events that has been deleted from the API
         if ($checkApiDiff === true && !empty($eventIds)) {
@@ -168,7 +188,6 @@ class EventManagerApi extends \EventManagerIntegration\Parser
         $event_id = $this->checkIfEventExists($event['id']);
         if ($event_id) {
             $post_status = get_post_status($event_id);
-            $this->log("Event <{$event['id']}> exists. Status: $post_status");
         } elseif (is_array($occasions) && !empty($occasions)) {
             // Unpublish the event if occasion is longer than limit option
             $unpublish_limit = get_field('event_unpublish_limit', 'option');
@@ -182,13 +201,10 @@ class EventManagerApi extends \EventManagerIntegration\Parser
             }
         }
 
-        if (!$event_id) {
-            $this->log("Event <{$event['id']}> is new.");
-        }
-
         // Save event if it passed taxonomy and group filters
         if ($pass_tax_filter) {
             try {
+                $apiEventId = $event['id'];
                 $event = new Event(
                     array(
                         'post_title' => $post_title,
@@ -256,6 +272,15 @@ class EventManagerApi extends \EventManagerIntegration\Parser
                 return;
             }
             $createSuccess = $event->save();
+
+            if ($createSuccess) {
+                $eventData = ["api" => $apiEventId, "wp" => $event->ID];
+                if ($event_id) {
+                    $this->updatedEventIdList[] = $eventData;
+                } else {
+                    $this->newEventIdList[] = $eventData;
+                }
+            }
 
             if ($createSuccess && !empty($featured_media)) {
                 $event->setFeaturedImageFromUrl($featured_media, true);
@@ -343,7 +368,6 @@ class EventManagerApi extends \EventManagerIntegration\Parser
      */
     public function removeDeletedEvents($ids)
     {
-        $this->log("Analysing API events for deletion: " . join($ids, ", "));
         global $wpdb;
         $table = $wpdb->prefix . "integrate_occasions";
         // Get all locally stored events

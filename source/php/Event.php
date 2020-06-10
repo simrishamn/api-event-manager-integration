@@ -22,7 +22,8 @@ class Event extends Entity\PostManager
      */
     public function afterSave()
     {
-        $this->saveOccasions();
+        $success = true;
+        $success = $success && $this->saveOccasions();
         $this->saveCategories();
         $this->saveGroups();
         $this->saveTags();
@@ -30,13 +31,15 @@ class Event extends Entity\PostManager
         $this->saveAddLocations();
         $this->saveLanguage();
         
-        if (!empty($this->gallery)) {
-            foreach ($this->gallery as $key => $image) {
-                $this->setFeaturedImageFromUrl($image['url'], false);
+        if ($success) {
+            if (!empty($this->gallery)) {
+                foreach ($this->gallery as $key => $image) {
+                    $this->setFeaturedImageFromUrl($image['url'], false);
+                }
             }
         }
 
-        return true;
+        return $success;
     }
 
     /**
