@@ -211,12 +211,10 @@ abstract class PostManager
         if (isset($duplicate->ID)) {
             //Check if event needs to be updated
             if (get_post_meta($duplicate->ID, 'last_update', true) != $meta['last_update']) {
-                $this->log("Event <{$meta['_event_manager_id']}> already exists with WP-ID <$duplicate->ID> but has a new update");
                 $post['ID'] = $duplicate->ID;
                 $this->ID = wp_update_post($post);
                 $isDuplicate = true;
             } else {
-                $this->log("Event <{$meta['_event_manager_id']}> already exists with WP-ID <$duplicate->ID> and has no updates");
                 return false;
             }
         } else {
