@@ -53,10 +53,10 @@ class EventManagerApi extends \EventManagerIntegration\Parser
                 );
 
                 $this->log("requesting events for: <$url>");
-                $requestStart = hrtime(true);
+                $requestStart = \microtime(true);
                 $events = \EventManagerIntegration\Parser::requestApi($url);
-                $requestFinish = hrtime(true);
-                $requestTimings[] = ($batchFinish - $batchStart) / 1e+6;
+                $requestFinish = \microtime(true);
+                $requestTimings[] = $batchFinish - $batchStart;
 
                 if (is_wp_error($events)) {
                     // Skip check of events diff on error
@@ -65,7 +65,7 @@ class EventManagerApi extends \EventManagerIntegration\Parser
                     $this->error("Error when fetching events. Code: {$events->get_error_code()}, Message: {$events->get_error_message()}");
                     break;
                 } elseif ($events) {
-                    $batchStart = hrtime(true);
+                    $batchStart = \microtime(true);
                     $this->log("Got events. Count: " . count($events));
                     // Save events to database
                     foreach ($events as $event) {
@@ -76,8 +76,8 @@ class EventManagerApi extends \EventManagerIntegration\Parser
                             $eventIds[] = $event['id'];
                         }
                     }
-                    $batchFinish = hrtime(true);
-                    $batchTimings[] = ($batchFinish - $batchStart) / 1e+6;
+                    $batchFinish = \microtime(true);
+                    $batchTimings[] = $batchFinish - $batchStart;
                 } else {
                     $this->log("No more events. Pagination: $page");
                     $page = false;
