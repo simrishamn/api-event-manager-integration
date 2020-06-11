@@ -23,7 +23,7 @@ class IntermediateImagesCleaner
             return;
         }
 
-        $attachments = list_files($baseDir, 1);
+        $attachments = glob("{$baseDir}/*");
         if ($attachments === false) {
             $this->error("Failed to list files when cleaning old intermediate images. File path: <{$filePath}>");
             return;
