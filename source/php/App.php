@@ -6,6 +6,12 @@ class App
 {
     use \EventManagerIntegration\LoggerSupport;
 
+    public const IMPORT_RUNNING_STATE = "event_mngr_is_running";
+    public const IMPORT_START_DATETIME = "event_mngr_last_run_start";
+    public const IMPORT_END_DATETIME = "event_mngr_last_run_end";
+    public const IMPORT_ERROR = "event_mngr_error";
+    private const IMPORT_RUNNING_EXPIRATION = 7200;
+
     /* Set to 'dev' or 'min' */
     public static $assetSuffix = 'min';
 
@@ -196,12 +202,45 @@ class App
      */
     public function importEventsCron()
     {
-        try {
-            if (get_field('event_daily_import', 'option') == true && $apiUrl = Helper\ApiUrl::buildApiUrl()) {
-                new Parser\EventManagerApi($apiUrl);
+        App::startImport('cron');
+    }
+
+    public static function startImport($origin = 'unknown')
+    {
+        $isRunning = get_transient(App::IMPORT_RUNNING_STATE);
+        if ($isRunning) {
+            return new \WP_Error('running', 'Import is already running.');
+        } else {
+            $runId = uniqid('event-importer');
+            try {
+                set_transient(App::IMPORT_RUNNING_STATE, ['origin' => $origin], App::IMPORT_RUNNING_EXPIRATION);
+                delete_transient(App::IMPORT_ERROR);
+
+                if (get_field('event_daily_import', 'option') == true && $apiUrl = Helper\ApiUrl::buildApiUrl()) {
+                    set_transient(
+                        App::IMPORT_START_DATETIME,
+                        [
+                            'time' => time(),
+                            'uid' => $runId
+                        ]
+                        );
+
+                    $importer = new Parser\EventManagerApi($apiUrl, $runId);
+                    return $importer->getCreatedData();
+                }
+            } catch(\Throwable $err) {
+                error_log("Catch-all for api-event-integration. Run Id: $runId. Error: " . print_r($err, true));
+                set_transient(App::IMPORT_ERROR, $err->getMessage());
+            } finally {
+                set_transient(
+                    App::IMPORT_END_DATETIME,
+                    [
+                        'time' => time(),
+                        'uid' => $runId
+                        ]
+                    );
+                delete_transient(App::IMPORT_RUNNING_STATE);
             }
-        } catch(\Throwable $err) {
-            $this->error("Catch-all for api-event-integration. Error: " . print_r($err, true));
         }
     }
 
