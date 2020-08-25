@@ -212,6 +212,9 @@ class App
             return new \WP_Error('running', 'Import is already running.');
         } else {
             $runId = uniqid('event-importer');
+            register_shutdown_function(function() {
+                delete_transient(App::IMPORT_RUNNING_STATE);
+            });
             try {
                 set_transient(App::IMPORT_RUNNING_STATE, ['origin' => $origin], App::IMPORT_RUNNING_EXPIRATION);
                 delete_transient(App::IMPORT_ERROR);
@@ -239,7 +242,6 @@ class App
                         'uid' => $runId
                         ]
                     );
-                delete_transient(App::IMPORT_RUNNING_STATE);
             }
         }
     }
