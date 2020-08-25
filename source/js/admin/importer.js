@@ -17,6 +17,9 @@ jQuery(document).ready(function ($) {
                     EventManagerIntegration.loadingOccasions = false;
                     restoreButton(button, storedCss);
                     location.reload();
+                }).fail(function () {
+                    alert('Import error or timeout')
+                    location.reload();
                 });
             });
         }

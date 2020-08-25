@@ -83,3 +83,61 @@
 #clear-draw-map {
     margin-bottom: 10px;
 }
+
+.emi_import-info {
+    position: relative;
+    margin-bottom: 8px; /* align with import button */
+    margin-left: 0.2rem;
+    color: black;
+    cursor: default;
+}
+
+.emi_import-info:hover {
+    background-color: lightgray;
+}
+
+.emi_import-info-status {
+    padding: 0.3rem 0.5rem;
+    background-color: inherit;
+    border: 1px solid transparent;
+    border-bottom: none;
+    border-radius: 0.2rem 0.2rem 0 0;
+    position: relative;
+    z-index: 2;
+}
+
+.emi_import-info:hover .emi_import-info-status {
+    border-color: darkgray;
+}
+
+.emi_import-info:hover .emi_import-info-status::after {
+    content: "";
+    position: absolute;
+    left: -1px;
+    right: -1px;
+    top: 100%;
+    height: 0.3rem;
+    background-color: lightgray;
+    border-width: 0 1px;
+    border-color: darkgray;
+    border-style: solid;
+}
+
+.emi_import-info-data {
+    display: none;
+    z-index: 1;
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%);
+    top: calc(100% + 0.5rem);
+    background-color: inherit;
+    padding: 0.5rem 0.75rem;
+    border: 1px solid darkgray;
+    border-radius: 0.2rem;
+    width: 260px;
+    white-space: normal;
+}
+
+.emi_import-info:hover > .emi_import-info-data {
+    display: block;
+}

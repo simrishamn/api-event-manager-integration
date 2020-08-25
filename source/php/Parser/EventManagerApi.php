@@ -11,16 +11,19 @@ class EventManagerApi extends \EventManagerIntegration\Parser
     private $intermediateImagesCleaner;
     private $newEventIdList;
     private $updatedEventIdList;
+    private $runId;
 
-    public function __construct($url)
+    public function __construct($url, $runId)
     {
         $this->intermediateImagesCleaner = new \EventManagerIntegration\Helper\IntermediateImagesCleaner($featuredImageId);
+        $this->runId = $runId;
         parent::__construct($url);
     }
 
     public function start()
     {
-        $this->log("starting import at " . date("c"));
+        $this->log("starting import at " . date("c") . " run-id: {$this->runId}");
+        $this->log("URL base for import is <$this->url>");
         $this->newEventIdList = [];
         $this->updatedEventIdList = [];
         if (function_exists('kses_remove_filters')) {
@@ -43,6 +46,8 @@ class EventManagerApi extends \EventManagerIntegration\Parser
             // Loop through paginated API request
             $page = 1;
             while ($page) {
+                set_time_limit(600);
+
                 $url = add_query_arg(
                     array(
                         'page' => $page,
@@ -52,7 +57,6 @@ class EventManagerApi extends \EventManagerIntegration\Parser
                     $this->url
                 );
 
-                $this->log("requesting events for: <$url>");
                 $requestStart = \microtime(true);
                 $events = \EventManagerIntegration\Parser::requestApi($url);
                 $requestFinish = \microtime(true);
@@ -66,7 +70,6 @@ class EventManagerApi extends \EventManagerIntegration\Parser
                     break;
                 } elseif ($events) {
                     $batchStart = \microtime(true);
-                    $this->log("Got events. Count: " . count($events));
                     // Save events to database
                     foreach ($events as $event) {
                         $event['lang'] = !empty($event['lang']) ? $event['lang'] : $language;
@@ -110,7 +113,7 @@ class EventManagerApi extends \EventManagerIntegration\Parser
 
         // Sync category translations
         \EventManagerIntegration\Helper\Translations::defineCategoryTranslations();
-        $this->log("finished import at " . date("c"));
+        $this->log("finished import at " . date("c") . " run-id: {$this->runId}");
     }
 
     /**

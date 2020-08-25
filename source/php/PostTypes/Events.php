@@ -410,13 +410,73 @@ class Events extends \EventManagerIntegration\Entity\CustomPostType
     public function addImportButtons($views)
     {
         if (current_user_can('administrator') || current_user_can('editor')) {
+            $runningState = get_transient(\EventManagerIntegration\App::IMPORT_RUNNING_STATE);
+            $isRunning = !!$runningState;
             $button  = '<div class="import-buttons actions" style="position: relative;">';
 
             if (get_field('event_api_url', 'option')) {
-                $button .= '<div id="importevents" class="button-primary">' . __('Import events', 'event-integration') . '</div>';
+                if ($isRunning) {
+                    $button .= '<div class="button-primary" style="background-color: lightgray;border-color: grey;cursor: default;">Import pågår</div>';
+                } else {
+                    $button .= '<div id="importevents" class="button-primary">' . __('Import events', 'event-integration') . '</div>';
+                }
             }
             $button .= '</div>';
-            $views['import-buttons'] = $button;
+
+            $latestImportStart = get_transient(\EventManagerIntegration\App::IMPORT_START_DATETIME);
+            $latestImportEnd = get_transient(\EventManagerIntegration\App::IMPORT_END_DATETIME);
+            $info = '';
+            if ($latestImportStart != false) {
+                $infoIcon = '';
+                $infoData = '';
+
+                if ($isRunning) {
+                    $infoIcon = '&#8987;';
+                    $infoData .= 'Pågående import startade: <strong style="white-space: nowrap;">' . date('Y-m-d H:i:s (T)', $latestImportStart['time']) . "</strong> av \"{$runningState['origin']}\"";
+                } else {
+                    function formatDateInterval($start, $end) {
+                        $startDate = date('Y-m-d', $start);
+                        $startTime = date('H:i:s', $start);
+                        $endDate = date('Y-m-d', $end);
+                        $endTime = date('H:i:s (T)', $end);
+                        if ($startDate == $endDate) {
+                            return "$startDate $startTime &ndash; $endTime";
+                        } else {
+                            return "$startDate $startTime &ndash; $endDate $endTime";
+                        }
+                    }
+
+                    $errorMessage = false;
+                    if ($latestImportEnd != false) {
+                        $startAndEndNotSameRun = $latestImportStart['uid'] != $latestImportEnd['uid'];
+                        if ($startAndEndNotSameRun) {
+                            $errorMessage = 'Den senaste importen körde aldrig klart';
+                        } else {
+                            $errorMessage = get_transient(\EventManagerIntegration\App::IMPORT_ERROR);
+                        }
+                    } else {
+                        $errorMessage = 'Saknar information om slutförande av import';
+                    }
+
+                    if ($errorMessage != false) {
+                        $infoIcon = '&#9940;';
+                        $infoData = 'Senaste importen misslyckades.<br>Startade vid <strong style="white-space: nowrap;">' . date('Y-m-d H:i:s (T)', $latestImportStart['time']) . "</strong>. Felmeddelande: <strong>{$errorMessage}</strong>";
+                    } else {
+                        $infoIcon = '&#9989;';
+                        $infoData = 'Senaste importen:<br><strong style="white-space: nowrap;">' . formatDateInterval($latestImportStart['time'], $latestImportEnd['time']) . '</strong>';
+                    }
+                }
+
+                $info .= '<div class="emi_import-info">';
+                $info .= '<span class="emi_import-info-status">' . $infoIcon . '</span>';
+                $info .= '<div class="emi_import-info-data">' . $infoData . '</div>';
+                $info .= '</div>';
+            }
+
+            $views['import-buttons'] =
+                '<div style="display: flex; align-items: center;">' .
+                    $button . $info .
+                '</div>';
         }
 
         return $views;
@@ -427,13 +487,13 @@ class Events extends \EventManagerIntegration\Entity\CustomPostType
      */
     public function importEvents()
     {
-        if ($apiUrl = \EventManagerIntegration\Helper\ApiUrl::buildApiUrl()) {
-            $importer = new \EventManagerIntegration\Parser\EventManagerApi($apiUrl);
-            $data = $importer->getCreatedData();
+        $data = \EventManagerIntegration\App::startImport('wp-admin');
+
+        if ($data == false) {
+            wp_die();
+        } else {
             wp_send_json($data);
         }
-
-        wp_die();
     }
 
     /**
