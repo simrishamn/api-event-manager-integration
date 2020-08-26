@@ -412,16 +412,19 @@ class Events extends \EventManagerIntegration\Entity\CustomPostType
         if (current_user_can('administrator') || current_user_can('editor')) {
             $runningState = get_transient(\EventManagerIntegration\App::IMPORT_RUNNING_STATE);
             $isRunning = !!$runningState;
-            $button  = '<div class="import-buttons actions" style="position: relative;">';
+            $button = '';
+            // Disable the button since it does not work with
+            // server environment used by Simrishamn
+            // $button  = '<div class="import-buttons actions" style="position: relative;">';
 
-            if (get_field('event_api_url', 'option')) {
-                if ($isRunning) {
-                    $button .= '<div class="button-primary" style="background-color: lightgray;border-color: grey;cursor: default;">Import pågår</div>';
-                } else {
-                    $button .= '<div id="importevents" class="button-primary">' . __('Import events', 'event-integration') . '</div>';
-                }
-            }
-            $button .= '</div>';
+            // if (get_field('event_api_url', 'option')) {
+            //     if ($isRunning) {
+            //         $button .= '<div class="button-primary" style="background-color: lightgray;border-color: grey;cursor: default;">Import pågår</div>';
+            //     } else {
+            //         $button .= '<div id="importevents" class="button-primary">' . __('Import events', 'event-integration') . '</div>';
+            //     }
+            // }
+            // $button .= '</div>';
 
             $latestImportStart = get_transient(\EventManagerIntegration\App::IMPORT_START_DATETIME);
             $latestImportEnd = get_transient(\EventManagerIntegration\App::IMPORT_END_DATETIME);
