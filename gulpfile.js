@@ -8,29 +8,29 @@
 //  "gulp watch"    -   Watch for file changes and build changed files
 //
 
-const gulp = require('gulp');
-const sass = require('gulp-sass');
+const {
+    series,
+    src,
+    dest,
+    watch: gulpWatch
+} = require('gulp');
+
+const sassStep = require('gulp-sass');
 const terser = require('gulp-terser');
 const cleanCSS = require('gulp-clean-css');
-const rename = require('gulp-rename');
 const autoprefixer = require('gulp-autoprefixer');
 const plumber = require('gulp-plumber');
 const rev = require('gulp-rev');
 const revDel = require('rev-del');
-const runSequence = require('run-sequence');
 const sourcemaps = require('gulp-sourcemaps');
 const notifier = require('node-notifier');
 const del = require('del');
-const eslint = require('gulp-eslint');
-const streamify = require('gulp-streamify');
 
 //Dependecies required to compile ES6 Scripts
 const browserify = require('browserify');
-const reactify = require('reactify');
 const source = require('vinyl-source-stream');
 const buffer = require('vinyl-buffer');
 const babelify = require('babelify');
-const es = require('event-stream');
 
 //Dependecies required to compile non React script
 const concat = require('gulp-concat');
@@ -38,126 +38,133 @@ const uglify = require('gulp-uglify');
 const jshint = require('gulp-jshint');
 
 // ==========================================================================
-// Default Task
-// ==========================================================================
-
-gulp.task('default', function(callback) {
-    runSequence('build', 'watch', callback);
-});
-
-// ==========================================================================
 // Build Tasks
 // ==========================================================================
 
-gulp.task('build', function(callback) {
-    runSequence('clean:dist', ['sass', 'scripts', 'img'], 'revision', callback);
-});
+const build = series(
+    cleanDist,
+    sass,
+    scripts,
+    img,
+    revision
+);
 
-gulp.task('build:sass', function(callback) {
-    runSequence('sass', 'revision', callback);
-});
-
-gulp.task('build:scripts', function(callback) {
-    runSequence('scripts', 'revision', callback);
-});
+const buildSass = series(sass, revision);
+const buildScripts = series(scripts, revision);
 
 // ==========================================================================
 // Watch Task
 // ==========================================================================
-gulp.task('watch', function() {
-    gulp.watch(['source/js/**/*.js', 'source/js/**/*.jsx'], ['build:scripts']);
-    gulp.watch('source/sass/**/*.scss', ['build:sass']);
-    gulp.watch('source/img/**/*.*', ['build:img']);
-});
+
+function watch() {
+    gulpWatch(['source/js/**/*.js', 'source/js/**/*.jsx'], buildScripts);
+    gulpWatch(['source/sass/**/*.scss'], buildSass);
+    gulpWatch(['source/img/**/*.*'], buildImg);
+}
 
 // ==========================================================================
 // SASS Task
 // ==========================================================================
-gulp.task('sass', function() {
-    var filePath = 'source/sass/';
-    var files = ['event-manager-integration.scss', 'event-manager-integration-admin.scss'];
 
-    var tasks = files.map(function(entry) {
-        return gulp
-            .src(filePath + entry)
-            .pipe(plumber())
-            .pipe(sourcemaps.init())
-            .pipe(
-                sass().on('error', function(err) {
-                    console.log(err.message);
-                    notifier.notify({
-                        title: 'SASS Compile Error',
-                        message: err.message,
-                    });
-                })
-            )
-            .pipe(autoprefixer('last 2 version', 'safari 5', 'ie 8', 'ie 9', 'opera 12.1'))
-            .pipe(sourcemaps.write())
-            .pipe(gulp.dest('dist/css'))
-            .pipe(cleanCSS({ debug: true }))
-            .pipe(gulp.dest('dist/.tmp/css'));
-    });
-
-    return es.merge.apply(null, tasks);
-});
+function sass() {
+    const filePath = 'source/sass/';
+    const tasks =
+        ['event-manager-integration.scss', 'event-manager-integration-admin.scss']
+            .map(fileName => new Promise(resolve => {
+                src(filePath + fileName)
+                .pipe(plumber())
+                .pipe(sourcemaps.init())
+                .pipe(
+                    sassStep().on('error', function(err) {
+                        console.log(err.message);
+                        notifier.notify({
+                            title: 'SASS Compile Error',
+                            message: err.message,
+                        });
+                    })
+                )
+                .pipe(autoprefixer('last 2 version', 'safari 5', 'ie 8', 'ie 9', 'opera 12.1'))
+                .pipe(sourcemaps.write())
+                .pipe(dest('dist/css'))
+                .pipe(cleanCSS({ debug: true }))
+                .pipe(dest('dist/.tmp/css'))
+                .on('end', resolve)
+            }));
+    return Promise.all(tasks);
+}
 
 // ==========================================================================
 // Scripts Task
 // ==========================================================================
-gulp.task('scripts', function() {
-    gulp.src(['source/js/admin/*.js'])
-        .pipe(plumber())
-        .pipe(sourcemaps.init())
-        .pipe(jshint())
-        .pipe(
-            jshint.reporter('fail').on('error', function(err) {
-                this.pipe(jshint.reporter('default'));
-                notifier.notify({
-                    title: 'JS Compile Error',
-                    message: err.message,
-                });
-            })
-        )
-        .pipe(concat('event-integration-admin.js'))
-        .pipe(sourcemaps.write())
-        .pipe(gulp.dest('dist/js'))
-        .pipe(
-            uglify().on('error', function(err) {
-                return;
-            })
-        )
-        .pipe(gulp.dest('dist/.tmp/js'));
 
-    gulp.src(['source/js/front/*.js'])
-        .pipe(plumber())
-        .pipe(sourcemaps.init())
-        .pipe(jshint())
-        .pipe(
-            jshint.reporter('fail').on('error', function(err) {
-                this.pipe(jshint.reporter('default'));
-                notifier.notify({
-                    title: 'JS Compile Error',
-                    message: err.message,
-                });
-            })
-        )
-        .pipe(concat('event-integration-front.js'))
-        .pipe(sourcemaps.write())
-        .pipe(gulp.dest('dist/js'))
-        .pipe(
-            uglify().on('error', function(err) {
-                return;
-            })
-        )
-        .pipe(gulp.dest('dist/.tmp/js'));
+function scripts() {
+    const streams = [];
 
-    var filePath = 'source/js/';
-    var files = ['Module/Event/Index.js'];
+    streams.push(
+        new Promise((resolve, reject) => {
+            src(['source/js/admin/*.js'])
+                .pipe(plumber())
+                .pipe(sourcemaps.init())
+                .pipe(jshint())
+                .pipe(
+                    jshint.reporter('fail').on('error', function(err) {
+                        this.pipe(jshint.reporter('default'));
+                        notifier.notify({
+                            title: 'JS Compile Error',
+                            message: err.message,
+                        });
+                    })
+                )
+                .pipe(concat('event-integration-admin.js'))
+                .pipe(sourcemaps.write())
+                .pipe(dest('dist/js'))
+                .pipe(
+                    uglify().on('error', function(err) {
+                        return;
+                    })
+                )
+                .pipe(dest('dist/.tmp/js'))
+                .on('end', resolve)
+                .on('error', reject);
+        })
+    )
 
-    var tasks = files.map(function(entry) {
-        return (
+
+    streams.push(
+        new Promise((resolve, reject) => {
+            src(['source/js/front/*.js'])
+                .pipe(plumber())
+                .pipe(sourcemaps.init())
+                .pipe(jshint())
+                .pipe(
+                    jshint.reporter('fail').on('error', function(err) {
+                        this.pipe(jshint.reporter('default'));
+                        notifier.notify({
+                            title: 'JS Compile Error',
+                            message: err.message,
+                        });
+                    })
+                )
+                .pipe(concat('event-integration-front.js'))
+                .pipe(sourcemaps.write())
+                .pipe(dest('dist/js'))
+                .pipe(
+                    uglify().on('error', function(err) {
+                        return;
+                    })
+                )
+                .pipe(dest('dist/.tmp/js'))
+                .on('end', resolve)
+                .on('error', reject);
+        })
+    )
+
+    streams.push(
+        new Promise((resolve, reject) => {
+            const filePath = 'source/js/';
+            const file = 'Module/Event/Index.js';
             browserify({
-                entries: [filePath + entry],
+                entries: [filePath + file],
                 debug: true,
             })
                 .transform([babelify])
@@ -172,46 +179,61 @@ gulp.task('scripts', function() {
 
                     this.emit('end');
                 })
-                .pipe(source(entry)) // Converts To Vinyl Stream
+                .pipe(source(file)) // Converts To Vinyl Stream
                 .pipe(buffer()) // Converts Vinyl Stream To Vinyl Buffer
                 // Gulp Plugins Here!
                 .pipe(sourcemaps.init())
                 .pipe(sourcemaps.write())
-                .pipe(gulp.dest('dist/js'))
+                .pipe(dest('dist/js'))
                 .pipe(terser())
-                .pipe(gulp.dest('dist/.tmp/js'))
-        );
-    });
+                .pipe(dest('dist/.tmp/js'))
+                .on('end', resolve)
+                .on('error', reject);
+        })
+    )
 
-    return es.merge.apply(null, tasks);
-});
+    return Promise.all(streams);
+}
 
 // ==========================================================================
 // Images
 // ==========================================================================
-var filePath = 'source/img/*.*';
 
-gulp.task('img', function() {
-    gulp.src(filePath).pipe(gulp.dest('dist/img'));
-});
+const filePath = 'source/img/*.*';
+function img() {
+    return src(filePath)
+        .pipe(dest('dist/img'));
+}
 
 // ==========================================================================
 // Revision Task
 // ==========================================================================
 
-gulp.task('revision', function() {
-    return gulp
-        .src(['./dist/.tmp/**/*'])
+function revision() {
+    return src('./dist/.tmp/**/*')
         .pipe(rev())
-        .pipe(gulp.dest('./dist'))
-        .pipe(rev.manifest('rev-manifest.json', { merge: true }))
+        .pipe(dest('./dist'))
+        .pipe(rev.manifest(('rev-manifest.json', { merge: true }))) // ('rev-manifest.json', { merge: true })
         .pipe(revDel({ dest: './dist' }))
-        .pipe(gulp.dest('./dist'));
-});
+        .pipe(dest('./dist'));
+}
 
 // ==========================================================================
 // Clean Task
 // ==========================================================================
-gulp.task('clean:dist', function() {
-    return del.sync('dist');
-});
+
+function cleanDist() {
+    return new Promise(resolve => {
+        del.sync('dist');
+        resolve();
+    });
+}
+
+// ==========================================================================
+// Exports
+// ==========================================================================
+
+exports.build = build;
+exports.buildSass = buildSass;
+exports.buildScripts = buildScripts;
+exports.default = series(build, watch);
