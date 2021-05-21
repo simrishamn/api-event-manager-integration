@@ -622,7 +622,7 @@ EventManagerIntegration.Event.Form = (function($) {
         $('.add-occurance', eventForm).click(
             function(event) {
                 event.preventDefault();
-                var $occuranceGroup = $(event.target)
+                var $occuranceGroup = $(event.currentTarget)
                         .parent()
                         .prev('[class*=occurance-group]'),
                     $duplicate = $occuranceGroup
