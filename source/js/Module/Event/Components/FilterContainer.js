@@ -15,6 +15,7 @@ const FilterContainer = ({
   onCategoryChange,
   onSubmit,
   onTagChange,
+  onFilterReset,
   searchString,
   settings,
   startDate,
@@ -84,6 +85,10 @@ const FilterContainer = ({
           />
         </div>
       )}
+
+      <div className="grid-fit-content">
+        <Button title={translation.resetSearch} color="theme-first" onClick={onFilterReset} />
+      </div>
 
       <div className="grid-fit-content">
         <Button title={translation.search} color="primary" submit />

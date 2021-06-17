@@ -59,7 +59,7 @@ const buildScripts = series(scripts, revision);
 function watch() {
     gulpWatch(['source/js/**/*.js', 'source/js/**/*.jsx'], buildScripts);
     gulpWatch(['source/sass/**/*.scss'], buildSass);
-    gulpWatch(['source/img/**/*.*'], buildImg);
+    gulpWatch(['source/img/**/*.*'], img);
 }
 
 // ==========================================================================

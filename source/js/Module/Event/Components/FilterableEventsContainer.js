@@ -6,11 +6,26 @@ import { getEvents } from '../../../Api/events';
 import EventList from './EventList';
 import FilterContainer from './FilterContainer';
 
+const searchFilterProperties = [
+  'startDate',
+  'endDate',
+  'categories',
+  'tags',
+  'ageRange',
+  'searchString'
+];
+
+const extractSearchFilterProperties = (state) => {
+  const result = {};
+  searchFilterProperties.forEach(propName => result[propName] = state.hasOwnProperty(propName) ? state[propName] : null);
+  return result;
+}
+
 class FilterableEventsContainer extends React.Component {
   constructor(props) {
     super(props);
 
-    this.state = {
+    const originalState = {
       age: null,
       ageRange: props.ageRange,
       categories: props.categories,
@@ -23,11 +38,18 @@ class FilterableEventsContainer extends React.Component {
       startDate: props.startDate,
       tags: props.tags,
       totalPages: 1,
-    };
+    }
+
+    this.originalSearchState = {};
+
+    this.state = originalState;
   }
 
   componentDidMount() {
     this.collectUrlParams();
+    setTimeout(() => {
+      this.originalSearchState = extractSearchFilterProperties(this.state);
+    });
   }
 
   /**
@@ -280,6 +302,14 @@ class FilterableEventsContainer extends React.Component {
     this.setState({ currentPage: 1 }, () => this.getEvents());
   };
 
+  onFilterReset = e => {
+    e.preventDefault();
+    this.setState({
+      currentPage: 1,
+      ...this.originalSearchState
+    }, () => this.getEvents());
+  };
+
   /**
    * From date change handler
    * @param date
@@ -399,6 +429,7 @@ class FilterableEventsContainer extends React.Component {
               onAgeChange={this.onAgeChange}
               onCategoryChange={this.onCategoryChange}
               onSubmit={this.onSubmit}
+              onFilterReset={this.onFilterReset}
               onTagChange={this.onTagChange}
               searchString={searchString}
               settings={settings}

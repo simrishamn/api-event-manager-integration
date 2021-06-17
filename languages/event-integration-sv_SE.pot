@@ -1169,6 +1169,10 @@ msgid "Search"
 msgstr ""
 
 #: source/php/Module/Event/Event.php:383
+msgid "Reset"
+msgstr ""
+
+#: source/php/Module/Event/Event.php:383
 #: source/php/Module/SubmitForm/views/formfields.blade.php:322
 #: source/php/Module/SubmitForm/views/formfields.blade.php:325
 #: source/php/PostTypes/Events.php:141

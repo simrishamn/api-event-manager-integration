@@ -380,6 +380,7 @@ class Event extends \Modularity\Module
                     'next' => __('Next', 'event-integration'),
                     'prev' => __('Previous', 'event-integration'),
                     'search' => __('Search', 'event-integration'),
+                    'resetSearch' => __('Reset', 'event-integration'),
                     'from' => __('From', 'event-integration'),
                     'to' => __('To', 'event-integration'),
                     'date' => __('date', 'event-integration'),
