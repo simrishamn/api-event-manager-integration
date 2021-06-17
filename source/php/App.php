@@ -31,6 +31,7 @@ class App
         new EventArchive();
         new Acf\AcfConfig();
         new Widget\DisplayEvents();
+        new Widget\SkaneSydostHeader();
         new Admin\Options();
         new Admin\AdminDisplayEvent();
         new Admin\MediaLibrary();
@@ -59,6 +60,7 @@ class App
 
         add_action('widgets_init', function () {
             register_widget('EventManagerIntegration\Widget\DisplayEvents');
+            register_widget('EventManagerIntegration\Widget\SkaneSydostHeader');
         });
 
         // Add view paths
