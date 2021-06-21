@@ -87,7 +87,9 @@ const FilterContainer = ({
       )}
 
       <div className="grid-fit-content">
-        <Button title={translation.resetSearch} color="theme-first" onClick={onFilterReset} />
+        <button className="btn btn-theme-first" type="button" onClick={onFilterReset}>
+          {translation.resetSearch}
+        </button>
       </div>
 
       <div className="grid-fit-content">
